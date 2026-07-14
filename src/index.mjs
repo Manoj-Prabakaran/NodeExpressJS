@@ -1,0 +1,100 @@
+import express from "express"
+import routes from './routes/router.mjs'
+import cookieParser from "cookie-parser"
+import session from "express-session"
+import { Strategy as localStrategy } from "passport-local"
+import passport from "passport"
+import { User } from "./mongoose/schema/user.mjs"
+import mongoose from "mongoose"
+
+const app = express()
+app.use(express.json())
+app.use(cookieParser("secret"))
+
+mongoose.connect('mongodb://localhost/express')
+    .then(()=> console.log("DB Connected"))
+    .catch((err)=> console.log(`Error: ${err}`))
+
+
+app.use(
+    session({
+        secret: "adwQews", // needs to be random 
+        saveUninitialized: false,
+        resave: false,
+        cookie: {
+            maxAge: 60000 * 60
+        }
+}))
+
+app.use(passport.initialize())
+app.use(passport.session())
+
+passport.use(new localStrategy(
+    {usernameField: "user_name", passwordField: "password"},
+    async (user_name, password, done)=>{
+        try{
+            const user = await User.findOne({user_name: user_name})
+    
+            if(!user){
+                return done(null, false, {message: "Invalid User"})
+            }
+            if(user.password !== password){
+                return done(null, false, {message: "Invalid Password"})
+            }
+            return done(null, user)
+        }catch(err){
+            console.log(err)
+            return done(err, false)
+        }
+    }
+))
+
+passport.serializeUser((user, done)=>{
+    done(null, user.id)
+})
+
+passport.deserializeUser((id, done)=>{
+    try{
+        const user = User.findById(id)
+        done(null, user)
+    }catch(err){
+        console.log(err)
+        done(err, false)
+    }
+})
+
+
+app.use(routes)
+
+
+const PORT = 3000
+
+app.get('/', (req, res)=>{
+    res.cookie("user", "Admin", {maxAge: 60000 * 60, signed: true})
+    console.log(req.session.id)
+    req.sessionStore.get(req.session.id, (err, sessionData)=>{
+        if(err){
+            console.log(err)
+        }else{
+            console.log(sessionData)
+        }
+    })
+    res.send({msg: "Home Page"})
+})
+
+app.post("/login", (req, res, next)=>{
+    passport.authenticate('local', (err, user, info)=>{
+        if(err) return next(err)
+        if(!user){
+            return res.status(401).json({message: info?.message || "Login Failed"})
+        }
+        req.login(user, (err)=>{
+            if(err) return next(err)
+            return res.json({message: "Login Successful", user})
+        })
+    })(req, res, next)
+})
+
+app.listen(PORT, ()=>{
+    console.log(`App running on Pord ${PORT}`)
+})
