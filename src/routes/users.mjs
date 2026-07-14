@@ -4,6 +4,7 @@ import { getParamsId, getUsersByIndex } from "../utils/middlewares.mjs";
 import { creatValidationSchema } from "../utils/validationSchema.mjs";
 import { validationResult, matchedData, checkSchema } from "express-validator";
 import {User} from "../mongoose/schema/user.mjs"
+import { hashpassword } from "../utils/helper.mjs";
 
 
 const router = Router()
@@ -41,6 +42,7 @@ router.post("/api/users",
     }
 
     const body = matchedData(req);
+    body.password = hashpassword(body.password)
     const newUser = new User(body);
     try{
         const savedUser = await newUser.save();
