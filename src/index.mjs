@@ -7,7 +7,7 @@ import passport from "passport"
 import { User } from "./mongoose/schema/user.mjs"
 import mongoose from "mongoose"
 import { comparePassword } from "./utils/helper.mjs"
-
+var GoogleStrategy = require('passport-google-oauth20').Strategy;
 const app = express()
 app.use(express.json())
 app.use(cookieParser("secret"))
@@ -49,6 +49,31 @@ passport.use(new localStrategy(
         }
     }
 ))
+
+
+passport.use(new GoogleStrategy({
+    clientID: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/cb"
+  },
+  async function(accessToken, refreshToken, profile, cb) {
+    try{
+        const user = await User.findOne({googleId: profile.id})
+        if(user){
+            return done(null, user)
+        }
+        const email = profile.emails?.[0]?.value
+        const newUser = await User.create({
+            user_name: profile.displayName,
+            googleId: profile.id,
+            email
+        })
+        return done(null, newUser)
+      }catch(err){
+        return done(err, null)
+      }
+    }
+));
 
 passport.serializeUser((user, done)=>{
     done(null, user.id)
@@ -95,6 +120,17 @@ app.post("/login", (req, res, next)=>{
         })
     })(req, res, next)
 })
+
+app.get("/auth/google", passport.authenticate("google"{
+    scope: ["profile", "email"]
+}))
+
+app.get("/auth/google/cb", passport.authenticate("google", 
+    { failedRedirect = "/"}),(req, res)=>{
+        res.send({msg: "Google login successful", user: req.user})
+    }
+
+)
 
 app.listen(PORT, ()=>{
     console.log(`App running on Pord ${PORT}`)
